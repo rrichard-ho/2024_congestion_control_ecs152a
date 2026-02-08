@@ -72,12 +72,12 @@ def receiver(data):
                     seq_num_tmp += payload_size(data, seq_num_tmp)
 
 
-        fin_packet = int.to_bytes(
+        eof_packet = int.to_bytes(
             len(data), SEQ_NUM_SIZE, byteorder="big", signed=True
         ) + b''
 
         while True:
-            udp_socket.sendto(fin_packet, receiver)
+            udp_socket.sendto(eof_packet, receiver)
             try:
                 ack, _ = udp_socket.recvfrom(PACKET_SIZE)
                 ack_num = int.from_bytes(ack[:SEQ_NUM_SIZE], byteorder="big", signed=True) 
@@ -85,6 +85,11 @@ def receiver(data):
                     break
             except socket.timeout:
                 continue
+
+        fin_packet = int.to_bytes(
+            len(data), SEQ_NUM_SIZE, byteorder="big", signed=True
+        ) + b'==FINACK=='
+        udp_socket.sendto(fin_packet, receiver)
 
         throughput = (datetime.now() - start_t).total_seconds()
         adpp = sum(delays) / len(delays)
@@ -103,3 +108,4 @@ if __name__=="__main__":
         print(f"Throughput: {throughput:.7f}")
         print(f"Average per-packet delay: {adpp:.7f}")
         print(f"Performance: {performance:.7f}")
+    

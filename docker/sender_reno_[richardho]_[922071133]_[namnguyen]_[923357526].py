@@ -145,8 +145,9 @@ def sender(data):
             len(data), SEQ_NUM_SIZE, byteorder="big", signed=True
         ) + b'==FINACK=='
         udp_socket.sendto(fin_packet, receiver)
+        end_t = datetime.now()
 
-        throughput = len(data) / (datetime.now() - start_t).total_seconds()
+        throughput = len(data) / (end_t - start_t).total_seconds()
         adpp = sum(delays) / len(delays)
         performance = 0.3*throughput/1000 + 0.7/adpp
     

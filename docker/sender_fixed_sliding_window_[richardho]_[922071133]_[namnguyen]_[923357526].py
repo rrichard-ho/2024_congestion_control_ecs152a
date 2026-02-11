@@ -12,7 +12,7 @@ SEQ_NUM_SIZE = 4
 # bytes available for message
 MESSAGE_SIZE = PACKET_SIZE - SEQ_NUM_SIZE
 # total packets to send
-WINDOW_SIZE = 1
+WINDOW_SIZE = 100
 
 
 def make_packet(data, seq_num):
@@ -83,15 +83,16 @@ def sender(data):
             len(data), SEQ_NUM_SIZE, byteorder="big", signed=True
         ) + b'==FINACK=='
         udp_socket.sendto(fin_packet, receiver)
+        end_t = datetime.now()
 
-        throughput = len(data) / (datetime.now() - start_t).total_seconds()
+        throughput = len(data) / (end_t - start_t).total_seconds()
         adpp = sum(delays) / len(delays)
         performance = 0.3*throughput/1000 + 0.7/adpp
     
         return throughput, adpp, performance
     
 if __name__=="__main__":
-    N = 10
+    N = 1
     data = None 
     throughputs = []
     adpps = []
@@ -100,20 +101,20 @@ if __name__=="__main__":
     with open("file.mp3", "rb") as f:
         data = f.read()
     for _ in range(N):
-        proc = subprocess.Popen(
-            ["bash", "./start-simulator.sh"],
-            start_new_session=True,  
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
-        time.sleep(2)
+        # proc = subprocess.Popen(
+        #     ["bash", "./start-simulator.sh"],
+        #     start_new_session=True,  
+        #     stdout=subprocess.DEVNULL,
+        #     stderr=subprocess.DEVNULL
+        # )
+        # time.sleep(2)
 
         t, a, p = sender(data=data)
         throughputs.append(t)
         adpps.append(a)
         performances.append(p)
 
-        os.killpg(proc.pid, signal.SIGTERM)
+        # os.killpg(proc.pid, signal.SIGTERM)
     
     throughput = sum(throughputs) / len(throughputs)
     adpp = sum(adpps) / len(adpps)

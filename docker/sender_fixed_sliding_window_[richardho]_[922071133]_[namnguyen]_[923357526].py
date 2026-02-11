@@ -1,5 +1,9 @@
 import socket
 from datetime import datetime
+import subprocess
+import os
+import time
+import signal
 
 # total packet size
 PACKET_SIZE = 1024
@@ -8,7 +12,7 @@ SEQ_NUM_SIZE = 4
 # bytes available for message
 MESSAGE_SIZE = PACKET_SIZE - SEQ_NUM_SIZE
 # total packets to send
-WINDOW_SIZE = 100
+WINDOW_SIZE = 1
 
 
 def make_packet(data, seq_num):
@@ -18,7 +22,7 @@ def payload_size(data, seg_num):
     return len(data[seg_num : seg_num + MESSAGE_SIZE])
 
 
-def receiver(data):
+def sender(data):
 
     first_time_sent = {}
     delays = []
@@ -40,6 +44,7 @@ def receiver(data):
         seq_num_tail = 0
 
         while seq_num_head < len(data):
+            # send next packets in the window range
             while seq_num_tail < len(data) and tail < head + WINDOW_SIZE:
                 pkt = make_packet(data, seq_num_tail)
                 udp_socket.sendto(pkt, receiver)
@@ -54,6 +59,7 @@ def receiver(data):
                 ack_num = int.from_bytes(ack[:SEQ_NUM_SIZE], byteorder="big", signed=True)
                 print(ack_num, ack[SEQ_NUM_SIZE:])
 
+                # keep track accumalative ACKs
                 while True:
                     ps = payload_size(data, seq_num_head)
                     if ps != 0 and seq_num_head + ps <= ack_num:
@@ -66,46 +72,53 @@ def receiver(data):
             
             except socket.timeout:
                 seq_num_tmp = seq_num_head
+                # go-back-N
                 for _ in range(head, tail):
                     pkt = make_packet(data, seq_num_tmp)
                     udp_socket.sendto(pkt, receiver)
                     seq_num_tmp += payload_size(data, seq_num_tmp)
 
-
-        eof_packet = int.to_bytes(
-            len(data), SEQ_NUM_SIZE, byteorder="big", signed=True
-        ) + b''
-
-        while True:
-            udp_socket.sendto(eof_packet, receiver)
-            try:
-                ack, _ = udp_socket.recvfrom(PACKET_SIZE)
-                ack_num = int.from_bytes(ack[:SEQ_NUM_SIZE], byteorder="big", signed=True) 
-                if ack_num == len(data) or ack_num == len(data) + 3:
-                    break
-            except socket.timeout:
-                continue
-
+        # send fin packet 
         fin_packet = int.to_bytes(
             len(data), SEQ_NUM_SIZE, byteorder="big", signed=True
         ) + b'==FINACK=='
         udp_socket.sendto(fin_packet, receiver)
 
-        throughput = (datetime.now() - start_t).total_seconds()
+        throughput = len(data) / (datetime.now() - start_t).total_seconds()
         adpp = sum(delays) / len(delays)
         performance = 0.3*throughput/1000 + 0.7/adpp
     
         return throughput, adpp, performance
     
 if __name__=="__main__":
-    N = 1
+    N = 10
     data = None 
+    throughputs = []
+    adpps = []
+    performances = []
     # read data from .mp3 file
     with open("file.mp3", "rb") as f:
         data = f.read()
     for _ in range(N):
-        throughput, adpp, performance = receiver(data=data)
-        print(f"Throughput: {throughput:.7f}")
-        print(f"Average per-packet delay: {adpp:.7f}")
-        print(f"Performance: {performance:.7f}")
+        proc = subprocess.Popen(
+            ["bash", "./start-simulator.sh"],
+            start_new_session=True,  
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        time.sleep(2)
+
+        t, a, p = sender(data=data)
+        throughputs.append(t)
+        adpps.append(a)
+        performances.append(p)
+
+        os.killpg(proc.pid, signal.SIGTERM)
     
+    throughput = sum(throughputs) / len(throughputs)
+    adpp = sum(adpps) / len(adpps)
+    performance = sum(performances) / len(performances)
+
+    print(f"Throughput: {throughput:.7f} bytes/second")
+    print(f"Average per-packet delay: {adpp:.7f} seconds")
+    print(f"Performance: {performance:.7f}")

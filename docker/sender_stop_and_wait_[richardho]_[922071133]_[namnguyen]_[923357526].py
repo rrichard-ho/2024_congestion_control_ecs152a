@@ -109,7 +109,7 @@ if __name__=="__main__":
     print(f"Average per-packet delay: {avg_adpp:.7f} seconds")
     print(f"Performance: {avg_performance:.7f}")
 
-    with open("out.txt", "a") as f:
-        f.write(f"{std_throughput:.7f}\n")
-        f.write(f"{std_adpp:7f}\n")
-        f.write(f"{std_performance:.7f}\n")
+    # with open("out.txt", "a") as f:
+    #     f.write(f"{std_throughput:.7f}\n")
+    #     f.write(f"{std_adpp:7f}\n")
+    #     f.write(f"{std_performance:.7f}\n")

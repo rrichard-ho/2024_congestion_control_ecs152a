@@ -4,6 +4,7 @@ import subprocess
 import os
 import time
 import signal
+import numpy as np
 
 # total packet size
 PACKET_SIZE = 1024
@@ -57,7 +58,6 @@ def sender(data):
                 ack, _ = udp_socket.recvfrom(PACKET_SIZE)
                 ack_time = datetime.now()
                 ack_num = int.from_bytes(ack[:SEQ_NUM_SIZE], byteorder="big", signed=True)
-                print(ack_num, ack[SEQ_NUM_SIZE:])
 
                 # keep track accumalative ACKs
                 while True:
@@ -78,12 +78,13 @@ def sender(data):
                     udp_socket.sendto(pkt, receiver)
                     seq_num_tmp += payload_size(data, seq_num_tmp)
 
+        end_t = datetime.now()
         # send fin packet 
         fin_packet = int.to_bytes(
             len(data), SEQ_NUM_SIZE, byteorder="big", signed=True
         ) + b'==FINACK=='
         udp_socket.sendto(fin_packet, receiver)
-        end_t = datetime.now()
+        
 
         throughput = len(data) / (end_t - start_t).total_seconds()
         adpp = sum(delays) / len(delays)
@@ -92,7 +93,7 @@ def sender(data):
         return throughput, adpp, performance
     
 if __name__=="__main__":
-    N = 1
+    N = 10
     data = None 
     throughputs = []
     adpps = []
@@ -101,25 +102,33 @@ if __name__=="__main__":
     with open("file.mp3", "rb") as f:
         data = f.read()
     for _ in range(N):
-        # proc = subprocess.Popen(
-        #     ["bash", "./start-simulator.sh"],
-        #     start_new_session=True,  
-        #     stdout=subprocess.DEVNULL,
-        #     stderr=subprocess.DEVNULL
-        # )
-        # time.sleep(2)
+        proc = subprocess.Popen(
+            ["bash", "./start-simulator.sh"],
+            start_new_session=True,  
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        time.sleep(2)
 
         t, a, p = sender(data=data)
         throughputs.append(t)
         adpps.append(a)
         performances.append(p)
 
-        # os.killpg(proc.pid, signal.SIGTERM)
+        os.killpg(proc.pid, signal.SIGTERM)
     
-    throughput = sum(throughputs) / len(throughputs)
-    adpp = sum(adpps) / len(adpps)
-    performance = sum(performances) / len(performances)
+    avg_throughput = np.mean(np.array(throughputs))
+    std_throughput = np.std(np.array(throughputs))
+    avg_adpp = np.mean(np.array(adpps))
+    std_adpp = np.std(np.array(adpps))
+    avg_performance = np.mean(np.array(performances))
+    std_performance = np.std(np.array(performances))
 
-    print(f"Throughput: {throughput:.7f} bytes/second")
-    print(f"Average per-packet delay: {adpp:.7f} seconds")
-    print(f"Performance: {performance:.7f}")
+    print(f"Throughput: {avg_throughput:.7f} bytes/second")
+    print(f"Average per-packet delay: {avg_adpp:.7f} seconds")
+    print(f"Performance: {avg_performance:.7f}")
+
+    # with open("out.txt", "a") as f:
+    #     f.write(f"{std_throughput:.7f}\n")
+    #     f.write(f"{std_adpp:7f}\n")
+    #     f.write(f"{std_performance:.7f}\n")

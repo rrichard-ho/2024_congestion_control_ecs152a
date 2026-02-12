@@ -1,5 +1,10 @@
 import socket
 from datetime import datetime
+import subprocess
+import os
+import time
+import signal
+import numpy as np
 
 PACKET_SIZE = 1024
 SEQ_ID_SIZE = 4
@@ -50,21 +55,11 @@ def sender(data):
                     continue
                 break # send next packet
         
-        # make fin 
-        fin_packet = make_packet(seq_id, b'')
-
-        # send fin
-        while True:
-            udp_socket.sendto(fin_packet, receiver)
-            try:
-                ack, _ = udp_socket.recvfrom(PACKET_SIZE)
-                ack_id = int.from_bytes(
-                    ack[:SEQ_ID_SIZE], signed=True, byteorder='big'
-                )
-                if ack_id >= len(data):
-                    break
-            except socket.timeout:
-                continue
+        # make fin
+        fin_packet = int.to_bytes(
+            len(data), SEQ_ID_SIZE, byteorder="big", signed=True
+        ) + b'==FINACK=='
+        udp_socket.sendto(fin_packet, receiver)
         
 
         # calculate metrics
@@ -79,18 +74,42 @@ def sender(data):
         return throughput, cur_avg_packet_delay, performance
     
 if __name__=="__main__":
-    data = None
+    N = 10
+    data = None 
     throughputs = []
-    avg_packet_delays = []
+    adpps = []
     performances = []
-
-    # read data
-    with open('file.mp3', 'rb') as f:
+    # read data from .mp3 file
+    with open("file.mp3", "rb") as f:
         data = f.read()
+    for _ in range(N):
+        proc = subprocess.Popen(
+            ["bash", "./start-simulator.sh"],
+            start_new_session=True,  
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        time.sleep(2)
 
-    throughput, packet_delay, performance = sender(data=data)
+        t, a, p = sender(data=data)
+        throughputs.append(t)
+        adpps.append(a)
+        performances.append(p)
+
+        os.killpg(proc.pid, signal.SIGTERM)
     
-    print(f"Throughput: {throughput:.7f} bytes/second")
-    print(f"Average Per-Packet Delay: {packet_delay:.7f} seconds")
-    print(f"Performance {performance:.7f}")
-    
+    avg_throughput = np.mean(np.array(throughputs))
+    std_throughput = np.std(np.array(throughputs))
+    avg_adpp = np.mean(np.array(adpps))
+    std_adpp = np.std(np.array(adpps))
+    avg_performance = np.mean(np.array(performances))
+    std_performance = np.std(np.array(performances))
+
+    print(f"Throughput: {avg_throughput:.7f} bytes/second")
+    print(f"Average per-packet delay: {avg_adpp:.7f} seconds")
+    print(f"Performance: {avg_performance:.7f}")
+
+    with open("out.txt", "a") as f:
+        f.write(f"{std_throughput:.7f}\n")
+        f.write(f"{std_adpp:7f}\n")
+        f.write(f"{std_performance:.7f}\n")
